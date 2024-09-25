@@ -1,0 +1,168 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+if not RunService:IsClient() then return end
+
+local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+
+-- FOV settings
+local FOV_RADIUS = 100
+
+-- Create the ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "WeaponDisplay"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Create the main frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 250, 0, 180)
+mainFrame.Position = UDim2.new(1, -260, 0, 10)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.Visible = false
+mainFrame.Parent = screenGui
+
+-- Add corner radius to main frame
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = mainFrame
+
+-- Create title label
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Name = "TitleLabel"
+titleLabel.Size = UDim2.new(1, 0, 0, 30)
+titleLabel.Position = UDim2.new(0, 0, 0, 0)
+titleLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+titleLabel.BorderSizePixel = 0
+titleLabel.Font = Enum.Font.GothamSemibold
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextSize = 16
+titleLabel.Text = "Player Inventory"
+titleLabel.Parent = mainFrame
+
+-- Add corner radius to title label
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = titleLabel
+
+-- Function to create weapon labels
+local function createWeaponLabel(name, yPos)
+    local container = Instance.new("Frame")
+    container.Name = name .. "Container"
+    container.Size = UDim2.new(1, -20, 0, 30)
+    container.Position = UDim2.new(0, 10, 0, yPos)
+    container.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    container.BorderSizePixel = 0
+    container.Parent = mainFrame
+
+    local label = Instance.new("TextLabel")
+    label.Name = name .. "Label"
+    label.Size = UDim2.new(1, -10, 1, 0)
+    label.Position = UDim2.new(0, 10, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.Gotham
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Text = name .. ": None"
+    label.Parent = container
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = container
+
+    return label
+end
+
+-- Create labels for different weapon types
+local primaryLabel = createWeaponLabel("Primary", 40)
+local secondaryLabel = createWeaponLabel("Secondary", 80)
+local sidearmLabel = createWeaponLabel("Sidearm", 120)
+local meleeLabel = createWeaponLabel("Melee", 160)
+
+-- Function to update weapon displays
+local function updateWeaponDisplay(player)
+    if not player then return end
+
+    local gunInventory = player:FindFirstChild("GunInventory")
+    if not gunInventory then return end
+
+    local function getWeaponName(slot)
+        local slotValue = gunInventory:FindFirstChild(slot)
+        if slotValue and slotValue:IsA("ObjectValue") then
+            return slotValue.Value and slotValue.Value.Name or "None"
+        end
+        return "None"
+    end
+
+    primaryLabel.Text = "Primary: " .. getWeaponName("Slot1")
+    secondaryLabel.Text = "Secondary: " .. getWeaponName("Slot2")
+    sidearmLabel.Text = "Sidearm: " .. getWeaponName("Slot3")
+    meleeLabel.Text = "Melee: " .. getWeaponName("Slot4")
+end
+
+-- Function to check if a player is in FOV
+local function isInFOV(player)
+    local character = player.Character
+    if not character then return false end
+
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return false end
+
+    local screenPoint, onScreen = workspace.CurrentCamera:WorldToScreenPoint(humanoidRootPart.Position)
+    if not onScreen then return false end
+
+    local mousePos = UserInputService:GetMouseLocation()
+    local distance = (Vector2.new(screenPoint.X, screenPoint.Y) - mousePos).Magnitude
+
+    return distance <= FOV_RADIUS
+end
+
+-- Create FOV circle
+local fovCircle = Drawing.new("Circle")
+fovCircle.Thickness = 1
+fovCircle.NumSides = 100
+fovCircle.Radius = FOV_RADIUS
+fovCircle.Filled = false
+fovCircle.Visible = true
+fovCircle.ZIndex = 999
+fovCircle.Transparency = 1
+fovCircle.Color = Color3.fromRGB(255, 255, 255)
+
+-- Function to handle FOV check and display update
+local function updateFOVDisplay()
+    if not LocalPlayer then return end
+
+    local targetPlayer = nil
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and isInFOV(player) then
+            targetPlayer = player
+            break
+        end
+    end
+
+    if targetPlayer then
+        mainFrame.Visible = true
+        updateWeaponDisplay(targetPlayer)
+        
+        -- Tween in the mainFrame
+        TweenService:Create(mainFrame, TweenInfo.new(0.3), {Position = UDim2.new(1, -260, 0, 10)}):Play()
+    else
+        -- Tween out the mainFrame
+        local tween = TweenService:Create(mainFrame, TweenInfo.new(0.3), {Position = UDim2.new(1, 10, 0, 10)})
+        tween:Play()
+        tween.Completed:Connect(function()
+            mainFrame.Visible = false
+        end)
+    end
+
+    fovCircle.Position = UserInputService:GetMouseLocation()
+end
+
+RunService:BindToRenderStep("FOVCheck", Enum.RenderPriority.Camera.Value + 1, updateFOVDisplay)
+
+print("Weapon Display Script Loaded")
